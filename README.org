@@ -1,0 +1,141 @@
+
+*  Information Consistent Pruning (Inf-CoP): How to Efficiently Search for Sparse Networks? 
+Iterative magnitude pruning methods (IMPs), proven to be successful in reducing the number of insignificant nodes in over-parameterized deep neural networks (DNNs), have been getting an enormous amount of attention with the rapid deployment of DNNs into cutting-edge technologies with computation and memory constraints.
+Despite IMPs popularity in pruning networks, a fundamental limitation of existing IMP algorithms is the significant training time required for each pruning iteration.
+Our paper introduces a novel \textit{stopping criterion} for IMPs that monitors information and gradient flows between networks layers and minimizes the training time.
+Information Consistent Pruning (Inf-CoP) eliminates the need to retrain the network to its original performance during intermediate steps while maintaining overall performance at the end of the pruning process.
+Through our experiments, we demonstrate that our algorithm is more efficient than current IMPs across multiple dataset-DNN combinations.
+We also provide theoretical insights into the core idea of our algorithm alongside mathematical explanations of flow-based IMP.
+
+
+
+* Setup
+* Experiments
+** SLURM Code blocks
+*** Running experiment
+
+#+name: run_exper
+#+begin_src sh :dir /ssh:acg:/home/gharatappeh/efficient_pruning/control_lth/hpc :results output :var flags="--exper_type=performance"
+sbatch pytorch.slurm ../src/prune.py $flags
+#+end_src
+
+#+call: run_exper(flags="--net_train_epochs=50 --net_warmup=10 --control_on=0 --exper_type=test --exper_num_trial=1")
+
+#+RESULTS:
+: Submitted batch job 1832978
+
+*** Getting directory of experiment
+#+name: get_exp_dir
+#+begin_src sh :dir /ssh:acg:/home/gharatappeh/efficient_pruning/control_lth/output/errors :results output :var pid="1986619"
+grep -i "In dir:" tbst_$pid.log | awk '{print $3}' | cut -d '/' -f 6-
+# grep -i "In dir:" tbst_$pid.log # | awk '{print $3}' 
+
+#+end_src
+
+#+name: get_status
+#+begin_src sh :dir /ssh:acg:/home/gharatappeh/efficient_pruning/control_lth/output/errors :results output :var pid="1894119"
+cat error_$pid
+#+end_src
+
+*** Plotting the results
+
+#+name: plot_experiment
+#+begin_src sh :dir /ssh:acg:/home/gharatappeh/efficient_pruning/control_lth/output/errors :results output :var pid="1872291"
+source ~/.bashrc
+exp_dir=$(grep -i "In dir:" tbst_$pid.log | awk '{print $3}' | cut -d '/' -f 6-)
+echo $exp_dir
+cd ../../src
+spytf plot_tool.py ../$exp_dir 2> /dev/null
+#+end_src
+
+#+call: plot_experiment(pid="1872291")
+
+#+RESULTS:
+: output/test/resnet18/CIFAR10/no_cntr/11-21-55/
+: similarity: 24
+: connectivity: 30
+: gradient: 30
+
+#+name: copy_plot
+#+begin_src sh :results output :var exp_dir="output/test/resnet18/CIFAR10/no_cntr/11-21-55/" :var dest="plot"
+scp acg:/home/gharatappeh/efficient_pruning/control_lth/$exp_dir/similarity.png /home/soheil/Sync/umaine/bnn/code/control_lth/output/figures/$dest.png
+#+end_src
+
+#+RESULTS: copy_plot
+
+#+call: copy_plot(exp_dir="output/test/resnet18/CIFAR10/no_cntr/11-21-55/", dest="plot")
+
+
+#+begin_src sh :dir /ssh:acg:/home/gharatappeh/efficient_pruning/control_lth/src :results output :var dir="../output/test/resnet18/CIFAR10/no_cntr/14-36/"
+source /opt/ohpc/pub/anaconda3/2022.10/bin/activate ib
+python plot_tool.py $dir
+#+end_src
+
+** MNIST
+One complete set of experiments using the MNIST dataset looks like the
+following. We can replace the network architecture (=--net_arch=) and dataset
+(=--net_dataset=) to observe the results for various types of networks across
+different sizes of dataset.
+
+
+*** ciap
+**** (p, q) = (1, 2)
+
+sbatch pytorch.slurm ../src/prune.py --net_arch=vgg16 --net_dataset=MNIST --net_lr=.01 --net_train_epochs=20 --net_warmup=10 --prune_method=ciap --prune_p=1.0 --prune_q=2.0 --exper_imp_total_iter=15 --exper_num_trial=3
+
+#+RESULTS:
+: Submitted batch job 1903488
+
+#+RESULTS:
+: In dir: /home/gharatappeh/efficient_pruning/control_lth/output/efficiency/vgg16/MNIST/no_cntr/02-25-55/
+
+**** (p, q) = (.5, 1)
+
+sbatch pytorch.slurm ../src/prune.py --net_arch=vgg16 --net_dataset=MNIST --net_lr=.01 --net_train_epochs=20 --net_warmup=10  --prune_method=ciap --prune_p=0.5 --prune_q=1.0 --exper_imp_total_iter=15 --exper_num_trial=3
+
+#+RESULTS:
+: Submitted batch job 1897115
+17h
+
+#+RESULTS:
+: In dir: /home/gharatappeh/efficient_pruning/control_lth/output/efficiency/vgg16/MNIST/no_cntr/08-12-31/
+
+*** giap
+**** (p, q) = (1, 2)
+
+sbatch pytorch.slurm ../src/prune.py --net_arch=vgg16 --net_dataset=MNIST --net_lr=.01 --net_train_epochs=20 --net_warmup=10 --prune_method=giap --prune_p=1.0 --prune_q=2.0 --exper_imp_total_iter=15 --exper_num_trial=3
+
+#+RESULTS:
+: Submitted batch job 1894127
+
+**** (p, q) = (.5, 1)
+
+sbatch pytorch.slurm ../src/prune.py --net_arch=vgg16 --net_dataset=MNIST --net_lr=.01 --net_train_epochs=20 --net_warmup=10 --prune_method=giap --prune_p=0.5 --prune_q=1.0 --exper_imp_total_iter=15 --exper_num_trial=3
+
+#+RESULTS:
+: Submitted batch job 1894130
+17h
+
+*** sap
+
+**** (p, q) = (1, 2)
+
+sbatch pytorch.slurm ../src/prune.py --net_arch=vgg16 --net_dataset=MNIST --net_lr=.01 --net_train_epochs=20 --net_warmup=10 --exper_type=performance --prune_method=sap --prune_p=1.0 --prune_q=2.0 --exper_imp_total_iter=15 --exper_num_trial=3
+
+#+RESULTS:
+: Submitted batch job 1890813
+
+**** (p, q) = (.5, 1)
+
+sbatch pytorch.slurm ../src/prune.py --net_arch=vgg16 --net_dataset=MNIST --net_lr=.01 --net_train_epochs=20 --net_warmup=10 --prune_method=sap --prune_p=0.5 --prune_q=1.0 --exper_imp_total_iter=15 --exper_num_trial=3
+
+#+RESULTS:
+: Submitted batch job 1898478
+
+*** lth
+sbatch pytorch.slurm ../src/prune.py --net_arch=vgg16 --net_dataset=MNIST --net_lr=.01 --net_train_epochs=20 --net_warmup=10 --prune_method=lth --prune_p=1.0 --prune_q=2.0 --exper_imp_total_iter=15 --exper_num_trial=3
+
+#+RESULTS:
+: Submitted batch job 1893997
+
+
