@@ -1,0 +1,111 @@
+% Created 2023-06-07 Wed 11:00
+% Intended LaTeX compiler: pdflatex
+\documentclass[a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{capt-of}
+\usepackage{hyperref}
+\usepackage[margin=0.5in]{geometry}
+\usepackage[margin=0.5in]{geometry}
+\date{}
+\title{2023-06-06 Tue}
+\hypersetup{
+ pdfauthor={Soheil Gharatappeh},
+ pdftitle={2023-06-06 Tue},
+ pdfkeywords={},
+ pdfsubject={},
+ pdfcreator={Emacs 28.2 (Org mode 9.5.5)}, 
+ pdflang={English}}
+\begin{document}
+
+\maketitle
+\begin{itemize}
+\item First, we try the effect of using pretrained network with and without
+controller \ref{orgd8d5e9e}
+\end{itemize}
+
+\begin{verbatim}
+Arch: resnet18
+Data: CIFAR10
+# IMP Iterations: 5
+Training per iter: 10
+# trial: 3
+Pretrained: True
+\end{verbatim}
+
+\begin{center}
+\includegraphics[width=400px]{/home/soheil/gpu/nips/report/06-07/pretrained/all_accuracies.png}
+\label{orgd8d5e9e}
+\end{center}
+
+\begin{itemize}
+\item Then, we try vgg16 to see the effect of changing network \ref{org1ce2010}
+\end{itemize}
+
+\begin{verbatim}
+Arch: vgg16
+Data: CIFAR10
+# IMP Iterations: 5
+Training per iter: 10
+# trial: 3
+Pretrained: True
+\end{verbatim}
+
+\begin{center}
+\includegraphics[width=400px]{/home/soheil/gpu/nips/report/06-07/vgg/all_accuracies.png}
+\label{org1ce2010}
+\end{center}
+
+\begin{itemize}
+\item We then try CIFAR100 to see the effect of adding more classes (vgg16) \ref{org5643f0c}
+\end{itemize}
+
+\begin{verbatim}
+Arch: vgg16
+Data: CIFAR100
+# IMP Iterations: 5
+Training per iter: 10
+# trial: 3
+Pretrained: True
+\end{verbatim}
+
+\begin{center}
+\includegraphics[width=400px]{/home/soheil/gpu/nips/report/06-07/cifar100/all_accuracies.png}
+\label{org5643f0c}
+\end{center}
+
+\begin{itemize}
+\item At last, I divided the norm of connectivity from the connectivity in the 1st
+type of controller such that the norm of the weight does not change after
+applying the controller \ref{orgf277e0b}
+\end{itemize}
+
+\begin{verbatim}
+Arch: resnet
+Data: CIFAR100
+# IMP Iterations: 5
+Training per iter: 10
+# trial: 3
+Pretrained: True
+\end{verbatim}
+
+\begin{center}
+\includegraphics[width=400px]{/home/soheil/gpu/nips/report/06-07/normal-rho/all_accuracies.png}
+\label{orgf277e0b}
+\end{center}
+\section{Questions}
+\label{sec:org5675300}
+\subsection{Do I need to set the gradients to zero when I am changing the weights?}
+\label{sec:org7d122de}
+\subsection{Is it important how to scale the connectivity between -1 and 1?}
+\label{sec:org51c5d98}
+\section{Tasks}
+\label{sec:orgeb01535}
+\end{document}

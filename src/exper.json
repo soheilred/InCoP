@@ -1,0 +1,38 @@
+{
+  "arch": "resnet",
+  "mode": "all",
+  "pretrained": "True",
+  "dataset": "MNIST",
+  "single_task": false,
+  "task_num": 0,
+  "run_id": "000",
+  "num_outputs": -1,
+  "cuda": true,
+  "cores": 4,
+  "save_prefix": "../checkpoints/",
+  "loadname": "",
+  "train_epochs": 3,
+  "train_per_epoch": 2,
+  "lr": 0.1,
+  "batch_size": 64,
+  "weight_decay": 0.0,
+  "Milestones": [
+    30,
+    60,
+    90
+  ],
+  "Gamma": 0.1,
+  "prune_method": "sparse",
+  "prune_perc_per_layer": 0.1,
+  "finetune_epochs": 2,
+  "freeze_perc": 0.0,
+  "num_freeze_layers": 0,
+  "freeze_order": [
+    "top"
+  ],
+  "control_at_iter": 2,
+  "control_at_epoch": 2,
+  "acc_thrd": 70,
+  "control_type": 1,
+  "imp_total_iter": 10
+}
