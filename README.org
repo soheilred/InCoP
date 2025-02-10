@@ -19,13 +19,13 @@ The code includes different pruning methods:
   (Gradient Flow based InCoP).
 
 ** Components
-- **Pruner:** Prunes the network based on specific pruning criteria determined by the chosen method.
-- **Activation:** Manages activation functions and gradient flows in the network.
-- **Similarity:** Calculates similarity metrics between layers of the network.
-- **Network:** Defines the neural network architecture and training/testing methods.
-- **Data:** Manages data loading and preprocessing for training and testing.
-- **Plot Tool:** Provides functions for plotting and visualizing results.
-- **Constants:** Contains shared constants and configuration settings.
+- *Pruner:* Prunes the network based on specific pruning criteria determined by the chosen method.
+- *Activation:* Manages activation functions and gradient flows in the network.
+- *Similarity:* Calculates similarity metrics between layers of the network.
+- *Network:* Defines the neural network architecture and training/testing methods.
+- *Data:* Manages data loading and preprocessing for training and testing.
+- *Plot Tool:* Provides functions for plotting and visualizing results.
+- *Constants:* Contains shared constants and configuration settings.
 
 
 * Setup
