@@ -1,76 +1,73 @@
 
 *  Information Consistent Pruning (Inf-CoP): How to Efficiently Search for Sparse Networks? 
-Iterative magnitude pruning methods (IMPs), proven to be successful in reducing the number of insignificant nodes in over-parameterized deep neural networks (DNNs), have been getting an enormous amount of attention with the rapid deployment of DNNs into cutting-edge technologies with computation and memory constraints.
-Despite IMPs popularity in pruning networks, a fundamental limitation of existing IMP algorithms is the significant training time required for each pruning iteration.
-Our paper introduces a novel \textit{stopping criterion} for IMPs that monitors information and gradient flows between networks layers and minimizes the training time.
-Information Consistent Pruning (Inf-CoP) eliminates the need to retrain the network to its original performance during intermediate steps while maintaining overall performance at the end of the pruning process.
-Through our experiments, we demonstrate that our algorithm is more efficient than current IMPs across multiple dataset-DNN combinations.
-We also provide theoretical insights into the core idea of our algorithm alongside mathematical explanations of flow-based IMP.
 
+This repository contains the Python code for the Inf-CoP project, which introduces a novel "stopping criterion" for iterative magnitude pruning methods (IMPs) to efficiently search for sparse networks. The project focuses on reducing the number of insignificant nodes in over-parameterized deep neural networks (DNNs) while minimizing the training time required for each pruning iteration.
+
+[[https://arxiv.org/abs/2501.15592][Link to the arxiv paper]].
+
+* Pruning Methods
+The code includes different pruning methods:
+
+- *LTH (Lottery Ticket Hypothesis):* Prunes the network based on a specified percentile value.
+- *SAP (Sparsity-Informed Adaptive Pruning):* Prunes the network based on signal activation
+  and correlations.
+- *CIAP (Correlation Informed Adaptive Pruning):* Prunes the network based on
+  correlation information. This method's name changed in the paper to InCoP-IF
+  (Information Flow based InCoP).
+- *GIAP (Gradient Informed Adaptive Pruning):* Prunes the network based on
+  gradient information. This method's name changed in the paper to InCoP-GF
+  (Gradient Flow based InCoP).
+
+** Components
+- **Pruner:** Prunes the network based on specific pruning criteria determined by the chosen method.
+- **Activation:** Manages activation functions and gradient flows in the network.
+- **Similarity:** Calculates similarity metrics between layers of the network.
+- **Network:** Defines the neural network architecture and training/testing methods.
+- **Data:** Manages data loading and preprocessing for training and testing.
+- **Plot Tool:** Provides functions for plotting and visualizing results.
+- **Constants:** Contains shared constants and configuration settings.
 
 
 * Setup
+
+** Requirements
+
+- Python 3.x
+- PyTorch
+- NumPy
+- tqdm
+- matplotlib
+- scikit-learn
+
+** Parameters
+- =--net_arch=vgg16=: Specifies the architecture or model type to be used for the neural network. In this case, the VGG16 architecture will be employed for the network design.
+
+- =--net_dataset=MNIST=: Indicates the dataset to be used for training and testing
+  the neural network for example MNIST.
+
+- =--net_lr=.01=: Denotes the learning rate value to be applied during the training process of the neural network. A learning rate of 0.01 will be utilized for updating the model parameters.
+
+- =--net_train_epochs=20=: Specifies the number of training epochs to be executed during the training phase of the neural network model. The network will undergo training for 20 epochs.
+
+- =--net_warmup=10=: Indicates the number of warm-up epochs to be conducted at the beginning of the training process. A warm-up period of 10 epochs will be performed prior to full training.
+
+- =--prune_method=ciap=: Determines the specific pruning method to be applied to
+  the neural network. In this case, the Correlation Information Adaptive Pruning (CIAP) method will be used for network pruning.
+
+- =--prune_p=1.0=: Represents a parameter value (p) specific to the pruning method, which impacts the pruning process. The value of p is set to 1.0 in this scenario.
+
+- =--prune_q=2.0=: Represents another parameter value (q) associated with the pruning method, influencing the pruning approach. The value of q is specified as 2.0 for this experiment.
+
+- =--exper_imp_total_iter=15=: Indicates the total number of iterative pruning
+  iterations to be conducted during the IMP. The network will undergo 15 iterative pruning iterations in the process.
+
+- =--exper_num_trial=3=: Specifies the number of trial runs or experiments to be carried out for testing and evaluation purposes. In this case, a total of 3 trial runs will be executed as part of the experiment.
+
+
+These flag descriptions provide clarity on the key parameters and settings used in the InfCoP for training, experiment types, and the number of trial runs.
+
+
 * Experiments
-** SLURM Code blocks
-*** Running experiment
-
-#+name: run_exper
-#+begin_src sh :dir /ssh:acg:/home/gharatappeh/efficient_pruning/control_lth/hpc :results output :var flags="--exper_type=performance"
-sbatch pytorch.slurm ../src/prune.py $flags
-#+end_src
-
-#+call: run_exper(flags="--net_train_epochs=50 --net_warmup=10 --control_on=0 --exper_type=test --exper_num_trial=1")
-
-#+RESULTS:
-: Submitted batch job 1832978
-
-*** Getting directory of experiment
-#+name: get_exp_dir
-#+begin_src sh :dir /ssh:acg:/home/gharatappeh/efficient_pruning/control_lth/output/errors :results output :var pid="1986619"
-grep -i "In dir:" tbst_$pid.log | awk '{print $3}' | cut -d '/' -f 6-
-# grep -i "In dir:" tbst_$pid.log # | awk '{print $3}' 
-
-#+end_src
-
-#+name: get_status
-#+begin_src sh :dir /ssh:acg:/home/gharatappeh/efficient_pruning/control_lth/output/errors :results output :var pid="1894119"
-cat error_$pid
-#+end_src
-
-*** Plotting the results
-
-#+name: plot_experiment
-#+begin_src sh :dir /ssh:acg:/home/gharatappeh/efficient_pruning/control_lth/output/errors :results output :var pid="1872291"
-source ~/.bashrc
-exp_dir=$(grep -i "In dir:" tbst_$pid.log | awk '{print $3}' | cut -d '/' -f 6-)
-echo $exp_dir
-cd ../../src
-spytf plot_tool.py ../$exp_dir 2> /dev/null
-#+end_src
-
-#+call: plot_experiment(pid="1872291")
-
-#+RESULTS:
-: output/test/resnet18/CIFAR10/no_cntr/11-21-55/
-: similarity: 24
-: connectivity: 30
-: gradient: 30
-
-#+name: copy_plot
-#+begin_src sh :results output :var exp_dir="output/test/resnet18/CIFAR10/no_cntr/11-21-55/" :var dest="plot"
-scp acg:/home/gharatappeh/efficient_pruning/control_lth/$exp_dir/similarity.png /home/soheil/Sync/umaine/bnn/code/control_lth/output/figures/$dest.png
-#+end_src
-
-#+RESULTS: copy_plot
-
-#+call: copy_plot(exp_dir="output/test/resnet18/CIFAR10/no_cntr/11-21-55/", dest="plot")
-
-
-#+begin_src sh :dir /ssh:acg:/home/gharatappeh/efficient_pruning/control_lth/src :results output :var dir="../output/test/resnet18/CIFAR10/no_cntr/14-36/"
-source /opt/ohpc/pub/anaconda3/2022.10/bin/activate ib
-python plot_tool.py $dir
-#+end_src
-
 ** MNIST
 One complete set of experiments using the MNIST dataset looks like the
 following. We can replace the network architecture (=--net_arch=) and dataset
