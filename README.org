@@ -1,5 +1,5 @@
 
-*  Information Consistent Pruning (Inf-CoP): How to Efficiently Search for Sparse Networks? 
+*  Information Consistent Pruning (InCoP): How to Efficiently Search for Sparse Networks? 
 
 This repository contains the Python code for the Inf-CoP project, which introduces a novel "stopping criterion" for iterative magnitude pruning methods (IMPs) to efficiently search for sparse networks. The project focuses on reducing the number of insignificant nodes in over-parameterized deep neural networks (DNNs) while minimizing the training time required for each pruning iteration.
 
