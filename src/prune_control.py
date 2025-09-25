@@ -20,6 +20,16 @@ import logging.config
 
 log = logging.getLogger("sampleLogger")
 
+class Controller:
+    def __init__(self, args):
+        """Control the IMP's connectivity.
+        """
+        self.c_type = args.control_type
+        self.c_layers = args.control_layer
+        self.c_iter = args.control_iteration
+        self.c_epoch = args.control_epoch
+
+
 class Pruner:
     def __init__(self, args, model, act, controller=None):
         """Prune the network.
@@ -53,9 +63,7 @@ class Pruner:
         # self.init_dump()
 
     def weight_init(self, m):
-        '''Initialize the weights randomly in a more fine-grained controlled
-        way. This has no effect on pretrained networks.
-        Usage:
+        '''Usage:
             model = Model()
             model.apply(weight_init)
         '''
@@ -121,8 +129,7 @@ class Pruner:
                     init.normal_(param.data)
 
     def init_lth(self):
-        """Initialize the lth object and the corresponding masks.
-        Steps:
+        """Prepare the lth object by:
         1. initializing the network's weights
         2. saving the initial state of the network into the object
         3. saving the initial state model on the disk
@@ -167,15 +174,30 @@ class Pruner:
     def reset_weights_to_init(self, initial_state_dict):
         """Reset the remaining weights in the network to the initial values.
         """
+        # step = 0
         for name, param in self.model.named_parameters():
             if "weight" in name and param.dim() > 1:
                 weight_dev = param.device
                 param.data = (self.mask[name[:-7]] * initial_state_dict[name]).to(weight_dev)
+                # step += 1
 
             if "bias" in name:
                 param.data = initial_state_dict[name]
 
     def prune_by_grads(self):
+        # grads = self.act.get_gradient()[0]
+
+        # for module_idx, module in enumerate(self.model.named_modules()):
+        #     if isinstance(module[1], nn.Conv2d) or \
+        #                  isinstance(module[1], nn.Linear):
+        #         if "downsample" in module[0]:
+        #             continue
+
+        #         if layer_id > 0:
+        #             layer_id += 1
+        #             continue
+        #        weight = module[1].weight.data
+
         for name, param in self.model.named_parameters():
 
             # We do not prune bias term
@@ -203,6 +225,16 @@ class Pruner:
     def prune_by_correlation(self):
         corrs = self.act.get_correlations()[-1]
         layers_idx = [elem[1] for elem in self.act.get_layers_idx()]
+
+        # for module_idx, module in enumerate(self.model.named_modules()):
+        #     if isinstance(module[1], nn.Conv2d) or \
+        #                  isinstance(module[1], nn.Linear):
+        #         if "downsample" in module[0]:
+        #             continue
+
+        #         if layer_id > 0:
+        #             layer_id += 1
+        #             continue
 
         for name, param in self.model.named_parameters():
 
@@ -393,9 +425,11 @@ class Pruner:
         for name, param in self.model.named_parameters():
             parameter_type = name.split('.')[-1]
             if 'weight' in parameter_type and param.dim() > 1:
+                # mask_i = mask.state_dict()[name]
                 pivot_param_i = param[self.mask[name[:-7]]].abs()
                 pivot_param.append(pivot_param_i.view(-1))
                 pivot_mask.append(self.mask[name[:-7]].view(-1))
+                # layer_id += 1
 
         pivot_param = torch.cat(pivot_param, dim=0).data.abs()
         pivot_mask = torch.cat(pivot_mask, dim=0)
@@ -418,11 +452,21 @@ class Pruner:
         num_prune = torch.floor(d * prune_ratio).long()
         pivot_value = torch.sort(pivot_param.view(-1))[0][num_prune]
 
+        # new_mask = [None] * self.num_layers
+        # layer_id = 0
+        # new_mask = OrderedDict()
         for name, param in self.model.named_parameters():
 
             if 'weight' in name and param.dim() > 1:
+                # tensor = param.data.cpu().numpy()
+                # alive = tensor[np.nonzero(tensor)]
+                # percentile_value = np.percentile(abs(alive), self.prune_perc)
+
                 # Convert Tensors to numpy and calculate
                 weight_dev = param.device
+                # new_mask = np.where(abs(tensor) < percentile_value, 0,
+                #                     self.mask[layer_id])
+
                 pivot_mask = (param.data.abs() < pivot_value).to(weight_dev)
                 new_mask = torch.where(pivot_mask, False, self.mask[name[:-7]])
 
@@ -434,6 +478,7 @@ class Pruner:
 
                 param.grad.mul_(new_mask)
                 self.mask[name[:-7]] = new_mask
+                # layer_id += 1
 
     def make_si_(self, model, mask, si_dict):
         sparsity_index = OrderedDict()
@@ -503,10 +548,130 @@ class Pruner:
                 layer_mask = self.composite_mask[module_idx]
                 module.weight.data[layer_mask.gt(self.task_num)] = 0.0
 
+    def apply_mask(self):
+        """Applies appropriate mask to recreate task model for inference.
+            To be done to retrieve weights just for a particular dataset
+        """
+        for module_idx, module in enumerate(self.model.shared.modules()):
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                weight = module.weight.data
+                mask = -100
+
+                # Any weights which weren't frozen in one of the tasks before
+                # or including task # dataset_idx are set to 0 
+                for i in range(0, self.task_num + 1):
+                    if i == 0:
+                        mask = self.all_task_masks[i][0][module_idx].cuda()
+                    else:
+                        mask = mask.logical_or(self.all_task_masks[i][0][module_idx].cuda())
+                weight[mask.eq(0)] = 0.0
+
+        self.model.eval()
+
+    def control(self, layers_dim, imp_iter):
+        control_corrs = self.corrs
+        log.debug(f"apply controller at layer {self.controller.c_layers}")
+
+        # print([corr.shape for corr in control_corrs[-1]])
+
+        # get the weights from previous iteration
+        prev_iter_weights = self.get_prev_iter_weights(imp_iter)
+
+        # get connectivity
+        connectivity = [(torch.mean(control_corrs[imp_iter - 1][i]) /
+                        (layers_dim[i][0] * layers_dim[i + 1][0]))
+                        for i in range(len(layers_dim) - 1)]
+
+        # get the coefficient based on connectivity
+        for ind in self.controller.c_layers:
+            prev_corr = self.correlation_to_weights(control_corrs, layers_dim,
+                                                    imp_iter, ind)
+            prev_weight = prev_iter_weights[ind]
+
+            # type 1
+            if (self.controller.c_type == 1):
+                control_weights = abs(prev_corr) # / max(connectivity)
+
+            # type 2
+            elif (self.controller.c_type == 2):
+                control_weights = torch.mul(prev_corr, prev_weight)
+
+            # type 3
+            elif (self.controller.c_type == 3):
+                control_weights = abs(connectivity[ind]) / max(connectivity) # * prev_weight
+
+            # type 4
+            elif (self.controller.c_type == 4):
+                control_weights = abs(prev_corr)
+                control_weights = torch.exp(control_weights) /\
+                    np.exp(control_weights).sum()
+
+            elif (self.controller.c_type == 5):
+                control_weights = torch.exp(abs(prev_corr))
+
+            self.apply_controller(control_weights, ind)
+
+    def apply_controller(self, control_weights, layer_idx):
+        idx = 0
+        for module_idx, module in enumerate(self.model.named_modules()):
+            if isinstance(module[1], nn.Conv2d) or \
+                         isinstance(module[1], nn.Linear):
+                if "downsample" in module[0]:
+                    continue
+
+                if (idx == layer_idx):
+                    # weight = module[1].weight.detach().cpu().numpy()
+                    weight = module[1].weight.data
+                    print("network's weight shape", module[0], weight.shape)
+                    # mod_weight = weight.cpu().numpy()
+                    weight_dev = module[1].weight.device
+                    control_weights = control_weights.to(weight_dev)
+                    # control_weights = torch.from_numpy(control_weights.astype("float32")).to(weight_dev)
+                    new_weight = (weight * control_weights).type(torch.cuda.FloatTensor)
+                    # module[1].weight = torch.nn.Parameter(new_weight,
+                    #                                        dtype=torch.float,
+                    #                                        device=weight_dev)
+                    print("control weight", torch.linalg.norm(control_weights))
+                    print("old weight", torch.linalg.norm(weight))
+                    print("new weight", torch.linalg.norm(new_weight))
+                    weight = new_weight
+                    break
+                idx += 1
+
+    def correlation_to_weights(self, control_corrs, layers_dim, imp_iter, layer_ind):
+        # the + 1 is for matching to the connectivity's dimension
+        weights = control_corrs[imp_iter - 1][layer_ind - 1]
+        # weights = control_corrs[0][layer_ind - 1]
+        kernel_size = layers_dim[layer_ind][-1]
+        weights = weights.repeat([kernel_size, kernel_size, 1, 1]).\
+            permute(3, 2, 1, 0)
+
+        # print(layer_ind, "controller weight shape", weights.shape, layers_dim[layer_ind])
+        # weights = np.tile(weights, reps=(kernel_size, kernel_size, 1, 1)).\
+    #                        transpose(1, 2).transpose(0, 3)
+                            # transpose(1, 2).transpose(0, 3).transpose(0, 1)
+        # weights = np.tile(weights, reps=(kernel_size, kernel_size, 1, 1)).\
+        #                        transpose(3, 2, 1, 0)
+        return weights
+
+    def get_prev_iter_weights(self, imp_iter):
+        run_dir = utils.get_run_dir(self.args)
+        model = torch.load(run_dir + str(imp_iter) + '_model.pth.tar')
+        # model.eval()
+        weights = {}
+
+        idx = 0
+        for module_idx, module in enumerate(self.model.named_modules()):
+            if isinstance(module[1], nn.Conv2d) or \
+                         isinstance(module[1], nn.Linear):
+                if (idx in self.controller.c_layers):
+                    weights[idx] = module[1].weight
+                idx += 1
+        return weights
+
+
 def lth(logger, device, args):
-    '''Runs the experiment for LTH
-    '''
-    ITERATION = args.exper_imp_total_iter
+    ITERATION = args.exper_imp_total_iter               # 35 was the default
     run_dir = utils.get_run_dir(args)
     data = Data(args.net_batch_size, C.DATA_DIR, args.net_dataset)
     train_dl, test_dl = data.train_dataloader, data.test_dataloader
@@ -519,10 +684,11 @@ def lth(logger, device, args):
     logger.debug("Warming up the pretrained model")
     max_acc = warm_up(model, train_dl, test_dl, loss_fn, optimizer, args, device)
 
-    similarity = Similarity(args, train_dl, device, run_dir, num_classes)
+    similarity = Similarity(args, test_dl, device, run_dir, num_classes)
     act = Activations(model, train_dl, device, args.net_batch_size)
     pruning = Pruner(args, model, act)
     init_state_dict = pruning.init_lth()
+    # act.compute_correlations()
 
     for imp_iter in tqdm(range(ITERATION)):
         # except for the first iteration, we don't prune in the first iteration
@@ -531,6 +697,7 @@ def lth(logger, device, args):
             # non_frozen_parameters = [p for p in model.parameters() if p.requires_grad]
             # optimizer = torch.optim.SGD(model.parameters(), lr=args.net_lr,
             #                             weight_decay=args.net_weight_decay)
+            # act.compute_correlations()
 
         logger.debug(f"[{imp_iter + 1}/{ITERATION}] " + "IMP loop")
 
@@ -547,12 +714,25 @@ def lth(logger, device, args):
             acc, loss = train(model, train_dl, loss_fn, optimizer, pruning.mask,
                               args.net_train_per_epoch, device)
 
+            # act.compute_correlations()
+
             # Test and save the most accurate model
             accuracy = test(model, test_dl, loss_fn, device)
+
+            # apply the controller at specific epochs and iteration
+            # if ((args.control_on == 1) and
+            #     (train_iter == controller.c_epoch) and
+            #    (imp_iter in controller.c_iter)):
+            #     act.compute_correlations()
+            #     corr = act.get_correlations()
+            #     pruning.control(corr, act.layers_dim, imp_iter)
+
             pruning.all_acc[imp_iter, train_iter] = accuracy
 
         # Save model
         utils.save_model(model, run_dir, f"{imp_iter + 1}_model.pth.tar")
+
+        # Calculate the connectivity
 
     output = [pruning.all_acc,
               similarity.get_similarity(),
@@ -582,7 +762,7 @@ def test_lth(logger, device, args):
     # warm up the pretrained model
     max_acc = warm_up(model, train_dl, test_dl, loss_fn, optimizer, args, device)
 
-    similarity = Similarity(args, train_dl, device, run_dir, num_classes)
+    similarity = Similarity(args, test_dl, device, run_dir, num_classes)
     act = Activations(model, train_dl, device, args.net_batch_size)
     pruning = Pruner(args, model, act)
     init_state_dict = pruning.init_lth()
@@ -630,6 +810,10 @@ def test_lth(logger, device, args):
         # Save model
         utils.save_model(model, run_dir, f"{imp_iter + 1}_model.pth.tar")
 
+        # Calculate the connectivity
+        # act.compute_correlations()
+        # logger.debug(f"similarities: {similarity.get_similarity()}")
+
     output = [pruning.all_acc,
               similarity.get_similarity(),
               act.get_conns(),
@@ -655,7 +839,7 @@ def ciap(logger, device, args):
     logger.debug("Pretraining warm-up")
     max_acc = warm_up(model, train_dl, test_dl, loss_fn, optimizer, args, device)
 
-    similarity = Similarity(args, train_dl, device, run_dir, num_classes)
+    similarity = Similarity(args, test_dl, device, run_dir, num_classes)
     act = Activations(model, train_dl, device, args.net_batch_size)
     pruning = Pruner(args, model, act)
     init_state_dict = pruning.init_lth()
@@ -666,6 +850,8 @@ def ciap(logger, device, args):
         if imp_iter != 0:
             pruning.prune_once(init_state_dict)
             act.compute_correlations()
+            # act.gradient_flow()
+            # similarity.cosine_similarity(model, imp_iter)
 
         logger.debug(f"[{imp_iter + 1}/{ITERATION}] " + "IMP loop")
 
@@ -684,6 +870,7 @@ def ciap(logger, device, args):
                               args.net_train_per_epoch, device)
             act.compute_correlations()
             # act.gradient_flow()
+            # similarity.cosine_similarity(model, imp_iter)
 
             # Test and save the most accurate model
             accuracy = test(model, test_dl, loss_fn, device)
@@ -695,6 +882,10 @@ def ciap(logger, device, args):
 
         # Save model
         utils.save_model(model, run_dir, f"{imp_iter + 1}_model.pth.tar")
+
+        # Calculate the connectivity
+        # act.compute_correlations()
+        # logger.debug(f"similarities: {similarity.get_similarity()}")
 
     output = [pruning.all_acc,
               similarity.get_similarity(),
@@ -721,7 +912,7 @@ def giap(logger, device, args):
     logger.debug("Pretraining warm-up")
     max_acc = warm_up(model, train_dl, test_dl, loss_fn, optimizer, args, device)
 
-    similarity = Similarity(args, train_dl, device, run_dir, num_classes)
+    similarity = Similarity(args, test_dl, device, run_dir, num_classes)
     act = Activations(model, train_dl, device, args.net_batch_size)
     pruning = Pruner(args, model, act)
     init_state_dict = pruning.init_lth()
@@ -764,6 +955,10 @@ def giap(logger, device, args):
 
         # Save model
         utils.save_model(model, run_dir, f"{imp_iter + 1}_model.pth.tar")
+
+        # Calculate the connectivity
+        # act.compute_correlations()
+        # logger.debug(f"similarities: {similarity.get_similarity()}")
 
     output = [pruning.all_acc,
               similarity.get_similarity(),
